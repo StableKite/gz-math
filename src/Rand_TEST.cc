@@ -17,6 +17,12 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <array>
+#include <future>
+#include <thread>
+#include <vector>
+
 #include "gz/math/Helpers.hh"
 #include "gz/math/Rand.hh"
 
@@ -83,4 +89,42 @@ TEST(RandTest, SetSeed)
     EXPECT_EQ(first[i], math::Rand::IntUniform(-10, 10));
     EXPECT_EQ(second[i], math::Rand::IntUniform(-10, 10));
   }
+}
+
+//////////////////////////////////////////////////
+TEST(RandTest, ConcurrentUniformSequence)
+{
+  constexpr size_t workers = 8;
+  constexpr size_t samples = 5000;
+  std::array<std::array<int32_t, samples>, workers> perThread;
+  std::promise<void> start;
+  auto ready = start.get_future().share();
+  std::vector<std::thread> threads;
+
+  math::Rand::Seed(1001);
+  for (auto &values : perThread)
+  {
+    threads.emplace_back([&values, ready]
+    {
+      ready.wait();
+      for (auto &value : values)
+        value = math::Rand::IntUniform(0, 100000000);
+    });
+  }
+  start.set_value();
+  for (auto &thread : threads)
+    thread.join();
+
+  std::vector<int32_t> concurrent;
+  for (const auto &values : perThread)
+    concurrent.insert(concurrent.end(), values.begin(), values.end());
+
+  math::Rand::Seed(1001);
+  std::vector<int32_t> sequential;
+  for (size_t i = 0; i < workers * samples; ++i)
+    sequential.push_back(math::Rand::IntUniform(0, 100000000));
+
+  std::sort(concurrent.begin(), concurrent.end());
+  std::sort(sequential.begin(), sequential.end());
+  EXPECT_EQ(concurrent, sequential);
 }

@@ -26,16 +26,23 @@
 #endif
 
 #include <limits>
+#include <mutex>
 
 #include "gz/math/Rand.hh"
 
 using namespace gz;
 using namespace math;
 
+namespace
+{
+std::mutex randMutex;
+}
+
 //////////////////////////////////////////////////
 void Rand::Seed(unsigned int _seed)
 {
   std::seed_seq seq{_seed};
+  const std::lock_guard<std::mutex> lock(randMutex);
   SeedMutable() = _seed;
   RandGenerator().seed(seq);
 }
@@ -43,6 +50,7 @@ void Rand::Seed(unsigned int _seed)
 //////////////////////////////////////////////////
 unsigned int Rand::Seed()
 {
+  const std::lock_guard<std::mutex> lock(randMutex);
   return SeedMutable();
 }
 
@@ -50,6 +58,7 @@ unsigned int Rand::Seed()
 double Rand::DblUniform(double _min, double _max)
 {
   UniformRealDist d(_min, _max);
+  const std::lock_guard<std::mutex> lock(randMutex);
   return d(RandGenerator());
 }
 
@@ -61,6 +70,7 @@ double Rand::DblNormal(double _mean, double _sigma)
     return _mean;
 
   NormalRealDist d(_mean, _sigma);
+  const std::lock_guard<std::mutex> lock(randMutex);
   return d(RandGenerator());
 }
 
@@ -69,6 +79,7 @@ int32_t Rand::IntUniform(int _min, int _max)
 {
   UniformIntDist d(_min, _max);
 
+  const std::lock_guard<std::mutex> lock(randMutex);
   return d(RandGenerator());
 }
 
@@ -80,6 +91,7 @@ int32_t Rand::IntNormal(int _mean, int _sigma)
 
   NormalRealDist d(_mean, _sigma);
 
+  const std::lock_guard<std::mutex> lock(randMutex);
   return static_cast<int32_t>(d(RandGenerator()));
 }
 
@@ -96,6 +108,7 @@ uint32_t &Rand::SeedMutable()
 //////////////////////////////////////////////////
 GeneratorType &Rand::RandGenerator()
 {
-  static GeneratorType randGenerator(Seed());
+  // Callers already hold the lock shared by the seed and the generator.
+  static GeneratorType randGenerator(SeedMutable());
   return randGenerator;
 }
